@@ -1,165 +1,131 @@
-# AEM Visual AI Regression (Python + Streamlit + Playwright + Ollama)
+# AEM Visual AI Regression (Python + Streamlit + Ollama)
 
-This tool captures **full-page screenshots** of Adobe Experience Manager (or any) pages, compares **baseline vs test** URLs per row using **structural similarity (SSIM)** and a visual diff overlay, and sends both images to a **local Ollama vision model** for a written comparison. You can download an **Excel report** with embedded screenshots.
+This proof-of-concept captures **full-page screenshots** for one or more URLs (typical **Adobe Experience Manager** pages), computes a **pixel-level diff** between a baseline URL and candidate URLs, and uses a **local Ollama LLM** to summarize risks and next steps. A **vision model** (optional) can describe what actually changed between images.
 
 ## What it does
 
-1. Enter one or more rows in the table: **Name** (label), **Baseline** (reference URL), **Test** (URL under test).
-2. Click **Run Test** to capture screenshots, compute metrics and a heatmap-style diff, and run **AI analysis** on the image pair.
-3. Use **Download Report (Excel)** for a workbook with images and metrics. The run also writes `report.xlsx` and `report.csv` in the project working directory.
+| URLs entered | Behavior |
+|--------------|----------|
+| **1** | Captures screenshot; text model outputs an AEM-focused visual QA checklist. |
+| **2+** | First line = **baseline**; each other line is compared to baseline (metrics + diff image + LLM text; optional vision). |
 
-The vision model used for analysis is configured in `core/llm.py` (default: `llama3.2-vision`).
+**URL parameters:** open the app with pre-filled URLs, for example:
+
+- `http://localhost:8501/?urls=https://author.example.com/content/mysite.html&urls=https://publish.example.com/content/mysite.html`
+- or a comma-separated single param (handled when one `urls` value contains commas)
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|--------|
-| **OS** | Windows, macOS, or Linux |
-| **Python** | **3.10+** (3.11+ recommended) |
-| **Ollama** | Installed and running; default API `http://127.0.0.1:11434` — [ollama.com/download](https://ollama.com/download) |
-| **Vision model** | Must support comparing two images in one chat (see setup below) |
-
-### Ollama installation (Windows example)
-
-1. Install Ollama from [ollama.com/download](https://ollama.com/download) (e.g. Windows installer).
-2. Verify in PowerShell or Command Prompt:
-   ```powershell
-   ollama --version
+1. **Windows, macOS, or Linux** with **Python 3.10+** (3.11–3.14 tested in this POC).
+2. **[Ollama](https://ollama.com)** installed and running (default API: `http://127.0.0.1:11434`).
+3. At least one **text** model pulled, for example:
+   ```bash
+   ollama pull llama3.2
    ```
-3. Pull the vision model expected by the app (must match `core/llm.py` or your edits):
-   ```powershell
-   ollama pull llama3.2-vision
+4. For image-aware comparison, a **vision** model, for example:
+   ```bash
+   ollama pull llava
    ```
-4. Ensure the Ollama app or service is running so models are available (`ollama list`).
+   Other multimodal models (e.g. `qwen2-vl` if available in your Ollama build) can be entered in the sidebar.
 
-If you change the model name in `core/llm.py`, pull that model instead.
-
-## Setup (step by step)
+## Build and run
 
 From the project root (`aem-visual-ai-regressoin`):
 
-### 1. Create a virtual environment (recommended)
-
-Use the block that matches your **OS and shell**. On **Windows, PowerShell does not support** the Unix command `source` — if you see `The term 'source' is not recognized`, you are in PowerShell; use **`.\.venv\Scripts\Activate.ps1`** instead of `source .venv/bin/activate`.
+### 1. Virtual environment (recommended)
 
 **Windows (PowerShell):**
 
 ```powershell
-cd D:\path\to\aem-visual-ai-regressoin
+cd "D:\path\to\aem-visual-ai-regressoin"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+playwright install chromium
 ```
 
-If execution policy blocks the script, run once: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` (or use Command Prompt below).
-
-**macOS / Linux (bash, zsh, and similar):**
+**macOS / Linux:**
 
 ```bash
 cd /path/to/aem-visual-ai-regressoin
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 2. Install Python dependencies
-
-```bash
 pip install -r requirements.txt
-```
-
-Dependencies include: `streamlit`, `playwright`, `pillow`, `numpy`, `scikit-image`, `pandas`, `openpyxl`, `ollama`, `pytest`.
-
-### 3. Install Playwright Chromium (required for screenshots)
-
-```bash
 playwright install chromium
 ```
 
-Without this, screenshot capture fails with an error suggesting `playwright install chromium`.
+`playwright install chromium` downloads the browser used for screenshots. Without it you will see errors about missing browser executables.
 
-### 4. Start Ollama
+### 2. Optional environment file
 
-Start the Ollama server so the app can reach the API (default `http://127.0.0.1:11434`). In a terminal, run:
+Copy `.env.example` to `.env` and adjust models or Ollama host if needed.
 
-```bash
-ollama serve
-```
+### 3. Start Ollama
 
-Keep that process running (or use the Ollama desktop app if it already starts the service). In another terminal you can run `ollama list` to confirm models are available.
+Ensure the Ollama app or service is running so `ollama list` works in a terminal.
 
-### 5. Run the app
+### 4. Start Streamlit
 
 ```bash
 streamlit run app.py
 ```
 
-Open the URL shown in the terminal (typically `http://localhost:8501`).
+Then open the URL shown in the terminal (usually `http://localhost:8501`).
 
 ## Using with AEM
 
-- **Author vs publish:** use Baseline / Test columns for the two environments.
-- **Dispatcher / cache:** visual diffs may reflect caching; use the AI text for QA hints.
-- **WCM mode:** append `?wcmmode=disabled` (or your standard query) so rendering matches end users.
-- **Auth:** if the default Playwright navigation is not enough for your site, extend `core/capture.py` (cookies, headers, or login flows) as needed.
-
-## Outputs
-
-| Location | Content |
-|----------|---------|
-| `screenshots/` | Per-run PNGs (named from your **Name** column) |
-| `report.xlsx` / `report.csv` | Written on each successful run with results |
-| Download button | Same Excel bytes as `report.xlsx` for convenience |
-
-Add `screenshots/` to `.gitignore` locally if you do not want screenshots committed.
+- **Author vs publish:** compare both URLs; use authentication if pages are protected.
+- **Dispatcher / cache:** differences may be cache-related; the LLM suggestions call this out for QA follow-up.
+- **WCM mode:** append `?wcmmode=disabled` (or your standard tack-on query) to match end-user rendering.
+- **Auth:** use **HTTP basic** fields in the sidebar, or **Extra headers** for cookies / tokens.
 
 ## Troubleshooting
 
-### `source` is not recognized (Windows PowerShell)
+### `playwright` / browser errors
 
-`source` is a **bash/zsh** builtin. In **PowerShell**, activate the venv with:
+- Run: `playwright install chromium`
+- Corporate proxies: configure system proxy or Playwright env vars per [Playwright documentation](https://playwright.dev/python/docs/network).
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
+### Navigation timeout or hang on “networkidle”
 
-Or use **Command Prompt** and run `.venv\Scripts\activate.bat`. Do not use `source .venv/bin/activate` unless you are in **Git Bash**, **WSL**, or **macOS/Linux**.
+AEM pages often keep the network busy (analytics, long polling). In the sidebar, set **Page load strategy** to **`domcontentloaded`** or **`load`**, increase **Navigation timeout**, and/or increase **Extra wait after load**.
 
-### Playwright / browser errors
+### `Connection refused` to Ollama
 
-- Run `playwright install chromium` again after Python or Playwright upgrades.
-- Behind a corporate proxy, follow [Playwright networking docs](https://playwright.dev/python/docs/network).
+- Start Ollama; confirm **Host** in the sidebar (e.g. `http://127.0.0.1:11434`).
+- Remote Ollama: bind/serve correctly and allow your machine through firewalls.
+- Click **Test Ollama connection** in the sidebar.
 
-### Navigation or timeout issues
+### `model not found` or empty LLM output
 
-- `core/capture.py` uses `page.goto` with a 60s timeout and a fixed 5s wait after load. For heavy AEM pages, increase `timeout` or `wait_for_timeout` there.
+- `ollama pull <model>` for **Text model** and **Vision model** names you configured.
+- Vision step: disable **Use vision model** if unknown errors occur—the text-only path still works from metrics.
 
-### Connection errors to Ollama
+### Vision step fails
 
-- Start Ollama and confirm `ollama list` works in a terminal.
-- The client uses the default host; for remote Ollama, configure the [Ollama Python client](https://github.com/ollama/ollama-python) / environment as supported by your setup.
-
-### `model not found` or LLM errors
-
-- Run `ollama pull llama3.2-vision` (or the model name set in `core/llm.py`).
-- Errors are surfaced in the UI as `[LLM unavailable] ...` from `analyze_with_llm`.
+- Confirm the vision model supports multiple images in one message for your Ollama version.
+- Try another model (e.g. `llava:latest`) or turn off vision and rely on text + heatmap.
 
 ### SSL / certificate errors on internal URLs
 
-- Ensure system trust stores include corporate roots, or test on trusted networks.
+- Use proper corporate roots or test with `http` on trusted networks; Playwright uses the system trust store.
 
-### Screenshots blocked by banners or geo gates
+### Screenshots look wrong (cookie banners, geo gates)
 
-- Increase wait time in `core/capture.py` or add headers/cookies after extending capture logic.
+- Increase post-load wait; add headers/cookies; use staging URLs without interstitials.
 
 ## Project layout
 
 | Path | Role |
 |------|------|
-| `app.py` | Streamlit UI: table editor, run orchestration, download |
-| `core/capture.py` | Playwright full-page screenshots (Chromium, spawn on Windows) |
-| `core/compare.py` | SSIM-based diff, metrics, overlay image |
-| `core/llm.py` | Ollama vision chat for two screenshots |
-| `core/reporting.py` | Excel + CSV export |
-| `requirements.txt` | Python dependencies |
+| `app.py` | Streamlit UI (sidebar: capture, SSIM threshold, Ollama, report options) |
+| `core/capture.py` | Playwright full-page capture (one browser per row) |
+| `core/compare.py` | SSIM metrics + diff heatmap |
+| `core/pipeline.py` | Capture → compare → vision LLM → result row |
+| `core/llm.py` | Ollama vision chat + connection check |
+| `core/reporting.py` | DataFrame + Excel with embedded images |
+| `core/config.py` | Env defaults (`OLLAMA_HOST`, `OLLAMA_VISION_MODEL`, `SCREENSHOTS_DIR`, `SSIM_PASS_THRESHOLD`, capture timeouts) |
+| `screenshots/` | Run screenshots and diffs (created at runtime; gitignore if desired) |
 
 ## License
 

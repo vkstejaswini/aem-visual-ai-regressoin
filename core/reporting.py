@@ -17,15 +17,28 @@ _REPORT_TEXT_COLUMNS = [
     "hotspot_area_pct",
     "mean_pixel_diff",
     "compared_width_px",
-    "compared_height_px",
-    "llm_analysis",
-]
+        "compared_height_px",
+        "Row time (s)",
+        "llm_analysis",
+    ]
 
 _PATH_KEYS = frozenset(
     {"baseline_screenshot_path", "test_screenshot_path", "diff_heatmap_path"}
 )
 
 _IMG_MAX_WIDTH_PX = 420
+
+# (Excel column index 1-based, result dict key)
+_METRIC_COLUMN_KEYS = [
+    (7, "similarity"),
+    (8, "status"),
+    (9, "structural_diff_pct"),
+    (10, "hotspot_area_pct"),
+    (11, "mean_pixel_diff"),
+    (12, "compared_width_px"),
+    (13, "compared_height_px"),
+    (14, "row_duration_sec"),
+]
 
 
 def _ordered_row_dict(r: dict) -> dict:
@@ -57,9 +70,9 @@ def _build_workbook(results: list) -> Workbook:
     headers = [
         "name",
         "baseline_url",
-        "Baseline screenshot",
+        "Base Link screenshot",
         "test_url",
-        "Test screenshot",
+        "Test Link screenshot",
         "Diff overlay",
         "similarity",
         "status",
@@ -67,7 +80,7 @@ def _build_workbook(results: list) -> Workbook:
         "hotspot_area_pct",
         "mean_pixel_diff",
         "compared_width_px",
-        "compared_height_px",
+        "row_duration_sec",
         "llm_analysis",
     ]
     for col, h in enumerate(headers, start=1):
@@ -79,9 +92,9 @@ def _build_workbook(results: list) -> Workbook:
     ws.column_dimensions["D"].width = 46
     ws.column_dimensions["E"].width = 52
     ws.column_dimensions["F"].width = 52
-    for c in "GHIJKLM":
+    for c in "GHIJKLMN":
         ws.column_dimensions[c].width = 14
-    ws.column_dimensions["N"].width = 72
+    ws.column_dimensions["O"].width = 72
 
     for i, r in enumerate(results):
         row = 2 + i
@@ -91,14 +104,9 @@ def _build_workbook(results: list) -> Workbook:
         ws.cell(row=row, column=2, value=r.get("baseline_url"))
         ws.cell(row=row, column=4, value=r.get("test_url"))
 
-        ws.cell(row=row, column=7, value=r.get("similarity"))
-        ws.cell(row=row, column=8, value=r.get("status"))
-        ws.cell(row=row, column=9, value=r.get("structural_diff_pct"))
-        ws.cell(row=row, column=10, value=r.get("hotspot_area_pct"))
-        ws.cell(row=row, column=11, value=r.get("mean_pixel_diff"))
-        ws.cell(row=row, column=12, value=r.get("compared_width_px"))
-        ws.cell(row=row, column=13, value=r.get("compared_height_px"))
-        llm_cell = ws.cell(row=row, column=14, value=r.get("llm_analysis"))
+        for col, key in _METRIC_COLUMN_KEYS:
+            ws.cell(row=row, column=col, value=r.get(key))
+        llm_cell = ws.cell(row=row, column=15, value=r.get("llm_analysis"))
         llm_cell.alignment = Alignment(wrap_text=True, vertical="top")
 
         b_path = r.get("baseline_screenshot_path")
@@ -118,8 +126,13 @@ def _build_workbook(results: list) -> Workbook:
     return wb
 
 
-def generate_report(results: list) -> tuple[pd.DataFrame, bytes]:
-    """Build a text-only DataFrame and an .xlsx file with PNGs embedded (not base64)."""
+def generate_report(
+    results: list,
+    *,
+    persist_csv_path: str | None = None,
+    persist_xlsx_path: str | None = None,
+) -> tuple[pd.DataFrame, bytes]:
+    """Build a text-only DataFrame and an .xlsx workbook (bytes). Optional disk export."""
     row_dicts = [_ordered_row_dict(r) for r in results]
     df = pd.DataFrame(row_dicts)
     head = [c for c in _REPORT_TEXT_COLUMNS if c in df.columns]
@@ -131,6 +144,10 @@ def generate_report(results: list) -> tuple[pd.DataFrame, bytes]:
     wb.save(buf)
     buf.seek(0)
     data = buf.getvalue()
-    wb.save("report.xlsx")
-    df.to_csv("report.csv", index=False)
+
+    if persist_xlsx_path:
+        wb.save(persist_xlsx_path)
+    if persist_csv_path:
+        df.to_csv(persist_csv_path, index=False)
+
     return df, data

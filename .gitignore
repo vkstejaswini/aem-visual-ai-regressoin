@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .env
 outputs/
+screenshots/
+report.xlsx
+report.csv
 *.egg-info/
 .pytest_cache/
 .mypy_cache/

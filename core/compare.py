@@ -3,9 +3,15 @@ import os
 from PIL import Image
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
+from skimage.util.arraycrop import crop
+
+from .config import ssim_pass_threshold
 
 # Pixels with local (1 - SSIM) above this count as a “hotspot” for area %.
 _HOTSPOT_THRESHOLD = 0.15
+
+# Interior crop must match skimage SSIM scalar (see structural_similarity source).
+_SSIM_WIN_SIZE = 7
 
 # Pad shorter screenshot to match full canvas (typical browser background).
 _PAD_GRAY = 255
@@ -59,9 +65,20 @@ def _save_diff_overlay(
     )
 
 
-def compare_images(img1_path, img2_path, diff_save_path=None):
-    pil1 = Image.open(img1_path)
-    pil2 = Image.open(img2_path)
+def compare_images(
+    img1_path,
+    img2_path,
+    diff_save_path=None,
+    *,
+    pass_threshold: float | None = None,
+):
+    threshold = (
+        pass_threshold if pass_threshold is not None else ssim_pass_threshold()
+    )
+
+    with Image.open(img1_path) as _p1, Image.open(img2_path) as _p2:
+        pil1 = _p1.copy()
+        pil2 = _p2.copy()
 
     w1, h1 = pil1.size
     w2, h2 = pil2.size
@@ -71,18 +88,24 @@ def compare_images(img1_path, img2_path, diff_save_path=None):
     a1 = _pad_gray(pil1, width, height)
     a2 = _pad_gray(pil2, width, height)
 
-    score, ssim_map = ssim(a1, a2, full=True)
+    score, ssim_map = ssim(a1, a2, full=True, win_size=_SSIM_WIN_SIZE)
+
+    pad = (_SSIM_WIN_SIZE - 1) // 2
+    ssim_valid = crop(ssim_map, pad)
+    dissim_valid = np.clip(1.0 - ssim_valid, 0.0, 1.0)
+    structural_diff_pct = round(float(np.mean(dissim_valid) * 100), 2)
+    hotspot_area_pct = round(
+        float(np.mean(dissim_valid > _HOTSPOT_THRESHOLD) * 100), 2
+    )
 
     dissim = np.clip(1.0 - ssim_map, 0.0, 1.0)
-    structural_diff_pct = round(float(np.mean(dissim) * 100), 2)
-    hotspot_area_pct = round(float(np.mean(dissim > _HOTSPOT_THRESHOLD) * 100), 2)
     mean_pixel_diff = round(
         float(np.mean(np.abs(a1.astype(np.float32) - a2.astype(np.float32)))), 2
     )
 
     out = {
         "similarity": round(score * 100, 2),
-        "status": "PASS" if score > 0.95 else "FAIL",
+        "status": "PASS" if score > threshold else "FAIL",
         "structural_diff_pct": structural_diff_pct,
         "hotspot_area_pct": hotspot_area_pct,
         "mean_pixel_diff": mean_pixel_diff,
