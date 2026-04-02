@@ -1,0 +1,9 @@
+streamlit
+playwright
+pillow
+numpy
+scikit-image
+pandas
+openpyxl
+ollama
+pytest
