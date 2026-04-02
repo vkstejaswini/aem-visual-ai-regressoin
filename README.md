@@ -40,15 +40,19 @@ From the project root (`aem-visual-ai-regressoin`):
 
 ### 1. Create a virtual environment (recommended)
 
+Use the block that matches your **OS and shell**. On **Windows, PowerShell does not support** the Unix command `source` — if you see `The term 'source' is not recognized`, you are in PowerShell; use **`.\.venv\Scripts\Activate.ps1`** instead of `source .venv/bin/activate`.
+
 **Windows (PowerShell):**
 
 ```powershell
-cd /path/to/aem-visual-ai-regressoin
+cd D:\path\to\aem-visual-ai-regressoin
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-**macOS / Linux:**
+If execution policy blocks the script, run once: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` (or use Command Prompt below).
+
+**macOS / Linux (bash, zsh, and similar):**
 
 ```bash
 cd /path/to/aem-visual-ai-regressoin
@@ -108,6 +112,16 @@ Open the URL shown in the terminal (typically `http://localhost:8501`).
 Add `screenshots/` to `.gitignore` locally if you do not want screenshots committed.
 
 ## Troubleshooting
+
+### `source` is not recognized (Windows PowerShell)
+
+`source` is a **bash/zsh** builtin. In **PowerShell**, activate the venv with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Or use **Command Prompt** and run `.venv\Scripts\activate.bat`. Do not use `source .venv/bin/activate` unless you are in **Git Bash**, **WSL**, or **macOS/Linux**.
 
 ### Playwright / browser errors
 
